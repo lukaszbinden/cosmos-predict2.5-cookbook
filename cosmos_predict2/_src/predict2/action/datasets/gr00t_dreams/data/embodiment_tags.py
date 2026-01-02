@@ -48,3 +48,5 @@ class EmbodimentTag(Enum):
     """
 
     AGIBOT = "agibot"
+
+    DVRK = "dvrk"

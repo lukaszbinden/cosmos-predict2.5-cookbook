@@ -125,9 +125,30 @@ ac_reason_embeddings_rectified_flow_2b_256_320 = LazyDict(
     flags={"allow_objects": True},
 )
 
+import copy
+ac_predict2p5_video2world_2b_suturebot_training = copy.deepcopy(ac_reason_embeddings_rectified_flow_2b_256_320)
+ac_predict2p5_video2world_2b_suturebot_training['job']['name'] = 'def_ac_predict2p5_video2world_2b_suturebot_training'
+ac_predict2p5_video2world_2b_suturebot_training['defaults'] = [
+    DEFAULT_CHECKPOINT.experiment,
+    {"override /model": "action_conditioned_video2world_fsdp_rectified_flow"},
+    {"override /net": "cosmos_v1_2B_action_conditioned"},
+    {"override /conditioner": "action_conditioned_video_conditioner"},
+    {"override /data_train": "suturebot_train"},
+    {"override /data_val": "suturebot_val"},
+    "_self_",
+]
+ac_predict2p5_video2world_2b_suturebot_training['model']['config']['net']['action_dim'] = 20
+ac_predict2p5_video2world_2b_suturebot_training['dataloader_train'] = {'batch_size': 4}
+ac_predict2p5_video2world_2b_suturebot_training['optimizer']['lr'] = 7.5e-6 # assuming 4 nodes
+
+print(f"+++++++++++++++++++++++++++++")
+print(ac_predict2p5_video2world_2b_suturebot_training)
+print(f"+++++++++++++++++++++++++++++")
+
+
 cs = ConfigStore.instance()
 
-for _item in [ac_reason_embeddings_rectified_flow_2b_256_320]:
+for _item in [ac_reason_embeddings_rectified_flow_2b_256_320, ac_predict2p5_video2world_2b_suturebot_training]:
     # Get the experiment name from the global variable
     experiment_name = [name.lower() for name, value in globals().items() if value is _item][0]  # noqa: RUF015
 

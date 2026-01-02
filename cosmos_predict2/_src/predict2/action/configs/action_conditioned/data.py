@@ -93,6 +93,48 @@ bridge_13frame_480_640_val_dataset = L(Dataset_3D)(
     mode="val",
 )
 
+# experiment for action-sequence video prediction
+base_path_suturebot_ds = "/SutureBot"
+# Construct modality configs and transforms
+from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset import LeRobotDataset
+from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.groot_configs import (
+    construct_modality_config_and_transforms,
+)
+modality_configs, train_transform, test_transform = construct_modality_config_and_transforms(
+    num_frames=13, embodiment="dvrk", downscaled_res=False
+)
+
+suturebot_train_dataset = L(LeRobotDataset)(
+    num_frames=13,
+    time_division_factor=4,
+    time_division_remainder=1,
+    max_pixels=1920 * 1080,
+    data_file_keys=("video",),
+    image_file_extension=("jpg", "jpeg", "png", "webp"),
+    video_file_extension=("mp4", "avi", "mov", "wmv", "mkv", "flv", "webm"),
+    repeat=1,
+    args=None,
+    dataset_path=base_path_suturebot_ds,
+    data_split="train",
+    embodiment="dvrk",
+    downscaled_res=False,
+)
+
+suturebot_val_dataset = L(LeRobotDataset)(
+    num_frames=13,
+    time_division_factor=4,
+    time_division_remainder=1,
+    max_pixels=1920 * 1080,
+    data_file_keys=("video",),
+    image_file_extension=("jpg", "jpeg", "png", "webp"),
+    video_file_extension=("mp4", "avi", "mov", "wmv", "mkv", "flv", "webm"),
+    repeat=1,
+    args=None,
+    dataset_path=base_path_suturebot_ds,
+    data_split="test",
+    embodiment="dvrk",
+    downscaled_res=False,
+)
 
 # ------------------------------------------------------------
 
@@ -153,6 +195,19 @@ bridge_13frame_480_640_val_dataloader = L(DataLoader)(
     drop_last=True,
 )
 
+suturebot_train_dataloader = L(DataLoader)(
+    dataset=suturebot_train_dataset,
+    sampler=L(get_sampler)(dataset=suturebot_train_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+suturebot_val_dataloader = L(DataLoader)(
+    dataset=suturebot_val_dataset,
+    sampler=L(get_sampler)(dataset=suturebot_val_dataset),
+    batch_size=1,
+    drop_last=True,
+)
+
 
 def register_training_and_val_data():
     cs = ConfigStore.instance()
@@ -197,6 +252,19 @@ def register_training_and_val_data():
         package="dataloader_val",
         name="bridge_13frame_480_640_val",
         node=bridge_13frame_480_640_val_dataloader,
+    )
+
+    cs.store(
+        group="data_train",
+        package="dataloader_train",
+        name="suturebot_train",
+        node=suturebot_train_dataloader,
+    )
+    cs.store(
+        group="data_val",
+        package="dataloader_val",
+        name="suturebot_val",
+        node=suturebot_val_dataloader,
     )
 
     # Register gr00t_customized_gr1 data

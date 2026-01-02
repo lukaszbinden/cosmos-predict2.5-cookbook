@@ -127,6 +127,23 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                 ],
             ),
         }
+    elif embodiment == "dvrk":
+        timestep_interval = 3  # LZ: downsampling rate
+        delta_indices = list(range(0, num_frames * timestep_interval, timestep_interval))
+        config = {
+            "video": ModalityConfig(
+                delta_indices=delta_indices,
+                modality_keys=["video.observation.images.main"],
+            ),
+            "state": ModalityConfig(
+                delta_indices=[0],
+                modality_keys=["state.observation.state"],
+            ),
+            "action": ModalityConfig(
+                delta_indices=delta_indices,
+                modality_keys=['action.action']
+            ),
+        }
 
     video_modality, state_modality, action_modality = config["video"], config["state"], config["action"]
     if embodiment == "gr1" or embodiment == "gr1_video_only":
@@ -135,6 +152,11 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
     elif embodiment == "agibot":
         width = 640 if not downscaled_res else 256
         height = 480 if not downscaled_res else 256
+    elif embodiment == "dvrk":
+        # width = 512 if not downscaled_res else 256
+        # height = 320 if not downscaled_res else 256
+        width = 960 if not downscaled_res else 256
+        height = 720 if not downscaled_res else 256
 
     train_transform = ComposedModalityTransform(
         transforms=[
@@ -145,12 +167,12 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
             StateActionToTensor(apply_to=state_modality.modality_keys),
             StateActionTransform(
                 apply_to=state_modality.modality_keys,
-                normalization_modes={key: "min_max" for key in state_modality.modality_keys},
+                normalization_modes={key: "mean_std" for key in state_modality.modality_keys},
             ),
             StateActionToTensor(apply_to=action_modality.modality_keys),
             StateActionTransform(
                 apply_to=action_modality.modality_keys,
-                normalization_modes={key: "min_max" for key in action_modality.modality_keys},
+                normalization_modes={key: "mean_std" for key in action_modality.modality_keys},
             ),
             ConcatTransform(
                 video_concat_order=video_modality.modality_keys,
@@ -166,12 +188,12 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
             StateActionToTensor(apply_to=state_modality.modality_keys),
             StateActionTransform(
                 apply_to=state_modality.modality_keys,
-                normalization_modes={key: "min_max" for key in state_modality.modality_keys},
+                normalization_modes={key: "mean_std" for key in state_modality.modality_keys},
             ),
             StateActionToTensor(apply_to=action_modality.modality_keys),
             StateActionTransform(
                 apply_to=action_modality.modality_keys,
-                normalization_modes={key: "min_max" for key in action_modality.modality_keys},
+                normalization_modes={key: "mean_std" for key in action_modality.modality_keys},
             ),
             ConcatTransform(
                 video_concat_order=video_modality.modality_keys,
