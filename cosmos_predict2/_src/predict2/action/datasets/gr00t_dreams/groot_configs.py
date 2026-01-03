@@ -23,6 +23,7 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.dataset imp
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.base import ComposedModalityTransform
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.concat import ConcatTransform
 from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.state_action import (
+    RelativeActionTransform,
     StateActionToTensor,
     StateActionTransform,
 )
@@ -170,6 +171,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                 normalization_modes={key: "mean_std" for key in state_modality.modality_keys},
             ),
             StateActionToTensor(apply_to=action_modality.modality_keys),
+            RelativeActionTransform(apply_to=action_modality.modality_keys),
             StateActionTransform(
                 apply_to=action_modality.modality_keys,
                 normalization_modes={key: "mean_std" for key in action_modality.modality_keys},
@@ -191,6 +193,7 @@ def construct_modality_config_and_transforms(num_frames, embodiment, downscaled_
                 normalization_modes={key: "mean_std" for key in state_modality.modality_keys},
             ),
             StateActionToTensor(apply_to=action_modality.modality_keys),
+            RelativeActionTransform(apply_to=action_modality.modality_keys),
             StateActionTransform(
                 apply_to=action_modality.modality_keys,
                 normalization_modes={key: "mean_std" for key in action_modality.modality_keys},

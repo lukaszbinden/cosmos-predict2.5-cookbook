@@ -1109,21 +1109,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
             return self.__getitem__(random.randint(0, len(self) - 1))  # noqa: F821
         video_frames = np.stack([np.array(frame, dtype=np.uint8) for frame in video_frames])
 
-        # Cumulative baselined delta actions (old version)
-        # NOTE: Need to tweak this after (num_frames + 1) change
-        # delta_actions = lerobot_data["action"][1:] - lerobot_data["action"][[0]]
-        # Chunked cumulative baselined delta actions (for chunked action architecture)
+        # Actions are now relative after RelativeActionTransform in the pipeline
+        # The transform converts 20D absolute actions to 20D relative actions
         actions = lerobot_data["action"]
-        delta_actions = []
-        for t in range(1, len(actions) - 1, self.time_division_factor):
-            delta_actions.append(actions[t : t + self.time_division_factor] - actions[t - 1])
-        delta_actions = torch.cat(delta_actions, dim=0)
 
         data = {
             "prompt": prompt,
             "video": torch.from_numpy(video_frames).permute(3, 0, 1, 2),
-            # "action": torch.from_numpy(delta_actions),
-            "action": (delta_actions),
+            "action": actions,
             "ai_caption": "",
             "text": prompt,
             "t5_text_embeddings": torch.zeros(512, 1024, dtype=torch.bfloat16).cuda(),
