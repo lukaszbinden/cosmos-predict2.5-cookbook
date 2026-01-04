@@ -1066,8 +1066,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
         self.lerobot_datasets = []
         for p in self.dataset_path:
             config, train_transform, test_transform = construct_modality_config_and_transforms(
-                num_frames=(num_frames + 1), embodiment=embodiment, downscaled_res=downscaled_res
-            )  # Add an additional prefix frame as baseline to compute delta actions
+                num_frames=num_frames, embodiment=embodiment, downscaled_res=downscaled_res
+            )
             self.lerobot_datasets.append(
                 WrappedLeRobotSingleDataset(
                     dataset_path=p,
@@ -1098,7 +1098,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
         video = lerobot_data["video"]
         video_frames = []
-        for i in range(1, video.shape[1]):  # Skip first frame (used only as action baseline)
+        for i in range(video.shape[1]):
             frame = video[:, i, :, :]
             frame = Image.fromarray(frame.permute(1, 2, 0).numpy())
             video_frames.append(frame)
@@ -1106,7 +1106,7 @@ class LeRobotDataset(torch.utils.data.Dataset):
             print(
                 f"Warning: Expected {self.num_frames} frames, but got {len(video_frames)} frames. Randomly sampling an item instead."
             )
-            return self.__getitem__(random.randint(0, len(self) - 1))  # noqa: F821
+            return self.__getitem__(randint(0, len(self) - 1))  # noqa: F821
         video_frames = np.stack([np.array(frame, dtype=np.uint8) for frame in video_frames])
 
         # Actions are now relative after RelativeActionTransform in the pipeline
@@ -1136,3 +1136,4 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return sum([len(d) for d in self.lerobot_datasets]) * self.repeat
+
