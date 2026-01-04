@@ -18,6 +18,7 @@ import random
 from typing import Any, ClassVar
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 # import pytorch3d.transforms as pt
 import torch
@@ -32,6 +33,131 @@ from cosmos_predict2._src.predict2.action.datasets.gr00t_dreams.data.transform.b
     InvertibleModalityTransform,
     ModalityTransform,
 )
+
+
+def rotation_6d_to_matrix(rot6d):
+    """
+    Convert 6D rotation representation to rotation matrix.
+    6D rotation is the first two ROWS of a rotation matrix (row-major format),
+    orthonormalized via Gram-Schmidt.
+
+    This matches the incoming dVRK/SutureBot data format:
+        [r11, r12, r13, r21, r22, r23] = [row1, row2]
+
+    Args:
+        rot6d: Array of shape (..., 6) containing [row1 (3), row2 (3)]
+
+    Returns:
+        Rotation matrices of shape (..., 3, 3)
+    """
+    shape = rot6d.shape[:-1]
+    rot6d = rot6d.reshape(*shape, 2, 3)
+
+    # First row (normalized)
+    row1 = rot6d[..., 0, :]
+    row1 = row1 / (np.linalg.norm(row1, axis=-1, keepdims=True) + 1e-8)
+
+    # Second row (orthogonalized and normalized)
+    row2 = rot6d[..., 1, :]
+    row2 = row2 - np.sum(row1 * row2, axis=-1, keepdims=True) * row1
+    row2 = row2 / (np.linalg.norm(row2, axis=-1, keepdims=True) + 1e-8)
+
+    # Third row (cross product)
+    row3 = np.cross(row1, row2)
+
+    # Stack into rotation matrix (as rows)
+    R = np.stack([row1, row2, row3], axis=-2)
+    return R
+
+
+def compute_rel_actions(actions):
+    """
+    Computes relative actions for a dual-arm robot.
+    Global translation delta, local (tooltip frame) rotation delta in 6D format.
+
+    Reference: https://github.com/real-stanford/universal_manipulation_interface
+
+    actions[0] is used as the base pose, actions[1:] are the targets.
+
+    Input per-arm: [xyz (3), 6D_rotation (6), gripper (1)] = 10
+    Dual-arm input: [n_actions, arm1 (10) + arm2 (10)] = [n_actions, 20]
+    Output per-arm: [delta_xyz (3), delta_rot6d (6), gripper (1)] = 10
+    Dual-arm output: [n_actions-1, arm1 (10) + arm2 (10)] = [n_actions-1, 20]
+
+    The relative rotation R_rel = R_base.T @ R_target is represented in 6D format
+    (first two rows of the rotation matrix, flattened).
+    """
+    if isinstance(actions, torch.Tensor):
+        actions = actions.numpy()
+
+    base = actions[0]
+    targets = actions[1:]
+    n_targets = targets.shape[0]
+    rel_actions = np.zeros((n_targets, 20))
+
+    for arm in range(2):
+        i = arm * 10  # Both input and output use same stride
+        R_base = rotation_6d_to_matrix(base[i + 3 : i + 9])
+        R_tgt = rotation_6d_to_matrix(targets[:, i + 3 : i + 9])
+
+        # Global translation delta
+        rel_actions[:, i : i + 3] = targets[:, i : i + 3] - base[i : i + 3]
+        # Relative rotation in 6D format (first 2 rows of R_rel, flattened)
+        R_rel = R_base.T @ R_tgt  # [n_targets, 3, 3]
+        rel_actions[:, i + 3 : i + 9] = R_rel[:, :2, :].reshape(n_targets, 6)
+        # Gripper (absolute value, not delta)
+        rel_actions[:, i + 9] = targets[:, i + 9]
+
+    return rel_actions
+
+
+def compute_rel_actions_local(actions):
+    """
+    Computes relative actions for a dual-arm robot using SE(3) transformation.
+    Both translation and rotation deltas are in the local (tooltip) frame.
+
+    Follows UMI 'relative' mode: T_rel = T_base^(-1) @ T_action
+    Reference: https://github.com/real-stanford/universal_manipulation_interface
+
+    actions[0] is used as the base pose, actions[1:] are the targets.
+
+    Input per-arm: [xyz (3), 6D_rotation (6), gripper (1)] = 10
+    Dual-arm input: [n_actions, arm1 (10) + arm2 (10)] = [n_actions, 20]
+    Output per-arm: [delta_xyz (3), delta_rotvec (3), gripper (1)] = 7
+    Dual-arm output: [n_actions-1, arm1 (7) + arm2 (7)] = [n_actions-1, 14]
+    """
+    if isinstance(actions, torch.Tensor):
+        actions = actions.numpy()
+
+    base = actions[0]
+    targets = actions[1:]
+    n_targets = targets.shape[0]
+    rel_actions = np.zeros((n_targets, 14))
+
+    for arm in range(2):
+        i, o = arm * 10, arm * 7
+
+        # Build 4x4 base pose matrix
+        T_base = np.eye(4)
+        T_base[:3, :3] = rotation_6d_to_matrix(base[i + 3 : i + 9])
+        T_base[:3, 3] = base[i : i + 3]
+
+        # Build 4x4 target pose matrices
+        T_targets = np.zeros((n_targets, 4, 4))
+        T_targets[:, :3, :3] = rotation_6d_to_matrix(targets[:, i + 3 : i + 9])
+        T_targets[:, :3, 3] = targets[:, i : i + 3]
+        T_targets[:, 3, 3] = 1.0
+
+        # SE(3) relative: T_rel = T_base^(-1) @ T_target
+        T_base_inv = np.linalg.inv(T_base)
+        T_rel = T_base_inv @ T_targets
+
+        # Extract components
+        rel_actions[:, o : o + 3] = T_rel[:, :3, 3]
+        rel_actions[:, o + 3 : o + 6] = Rotation.from_matrix(T_rel[:, :3, :3]).as_rotvec()
+        rel_actions[:, o + 6] = targets[:, i + 9]
+
+    return rel_actions
 
 
 class RotationTransform:
@@ -498,6 +624,36 @@ class StateActionTransform(InvertibleModalityTransform):
                 else:
                     raise ValueError(f"Invalid input dtype: {original_dtype}")
             data[key] = state
+        return data
+
+
+class RelativeActionTransform(ModalityTransform):
+    """
+    Converts absolute actions to relative actions using compute_rel_actions.
+
+    This transform is used for dVRK (da Vinci Research Kit) datasets where:
+    - Input: 20D absolute actions [T, 20] (xyz + 6D_rot + gripper per arm)
+    - Output: 20D relative actions [T-1, 20] (delta_xyz + delta_rot6d + gripper per arm)
+
+    The relative actions are computed using global translation delta and local
+    (tooltip frame) rotation delta. The rotation delta is represented in 6D format
+    (first two rows of the relative rotation matrix).
+    """
+
+    apply_to: list[str] = Field(..., description="The action keys to transform to relative actions.")
+
+    def apply(self, data: dict[str, Any]) -> dict[str, Any]:
+        for key in self.apply_to:
+            if key not in data:
+                continue
+            actions = data[key]
+            # Convert to numpy if tensor
+            is_tensor = isinstance(actions, torch.Tensor)
+            actions_np = actions.numpy() if is_tensor else actions
+            # Compute relative actions: [T, 20] -> [T-1, 20]
+            rel_actions = compute_rel_actions(actions_np)
+            # Convert back to tensor if input was tensor
+            data[key] = torch.from_numpy(rel_actions).to(actions.dtype) if is_tensor else rel_actions
         return data
 
 
