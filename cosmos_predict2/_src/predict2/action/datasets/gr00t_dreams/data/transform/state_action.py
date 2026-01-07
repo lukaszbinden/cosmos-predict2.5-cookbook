@@ -123,8 +123,8 @@ def compute_rel_actions_local(actions):
 
     Input per-arm: [xyz (3), 6D_rotation (6), gripper (1)] = 10
     Dual-arm input: [n_actions, arm1 (10) + arm2 (10)] = [n_actions, 20]
-    Output per-arm: [delta_xyz (3), delta_rotvec (3), gripper (1)] = 7
-    Dual-arm output: [n_actions-1, arm1 (7) + arm2 (7)] = [n_actions-1, 14]
+    Output per-arm: [delta_xyz (3), delta_rot6d (6), gripper (1)] = 10
+    Dual-arm output: [n_actions-1, arm1 (10) + arm2 (10)] = [n_actions-1, 20]
     """
     if isinstance(actions, torch.Tensor):
         actions = actions.numpy()
@@ -132,10 +132,10 @@ def compute_rel_actions_local(actions):
     base = actions[0]
     targets = actions[1:]
     n_targets = targets.shape[0]
-    rel_actions = np.zeros((n_targets, 14))
+    rel_actions = np.zeros((n_targets, 20))
 
     for arm in range(2):
-        i, o = arm * 10, arm * 7
+        i = arm * 10  # Same stride for input and output
 
         # Build 4x4 base pose matrix
         T_base = np.eye(4)
@@ -153,9 +153,10 @@ def compute_rel_actions_local(actions):
         T_rel = T_base_inv @ T_targets
 
         # Extract components
-        rel_actions[:, o : o + 3] = T_rel[:, :3, 3]
-        rel_actions[:, o + 3 : o + 6] = Rotation.from_matrix(T_rel[:, :3, :3]).as_rotvec()
-        rel_actions[:, o + 6] = targets[:, i + 9]
+        rel_actions[:, i : i + 3] = T_rel[:, :3, 3]  # Local translation delta
+        R_rel = T_rel[:, :3, :3]  # Relative rotation matrix
+        rel_actions[:, i + 3 : i + 9] = R_rel[:, :2, :].reshape(n_targets, 6)  # 6D rotation (first 2 rows)
+        rel_actions[:, i + 9] = targets[:, i + 9]  # Gripper (absolute)
 
     return rel_actions
 
@@ -651,7 +652,7 @@ class RelativeActionTransform(ModalityTransform):
             is_tensor = isinstance(actions, torch.Tensor)
             actions_np = actions.numpy() if is_tensor else actions
             # Compute relative actions: [T, 20] -> [T-1, 20]
-            rel_actions = compute_rel_actions(actions_np)
+            rel_actions = compute_rel_actions_local(actions_np)
             # Convert back to tensor if input was tensor
             data[key] = torch.from_numpy(rel_actions).to(actions.dtype) if is_tensor else rel_actions
         return data
