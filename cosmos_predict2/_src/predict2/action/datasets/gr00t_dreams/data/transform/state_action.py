@@ -652,7 +652,7 @@ class RelativeActionTransform(ModalityTransform):
             is_tensor = isinstance(actions, torch.Tensor)
             actions_np = actions.numpy() if is_tensor else actions
             # Compute relative actions: [T, 20] -> [T-1, 20]
-            rel_actions = compute_rel_actions_local(actions_np)
+            rel_actions = compute_rel_actions(actions_np)
             # Convert back to tensor if input was tensor
             data[key] = torch.from_numpy(rel_actions).to(actions.dtype) if is_tensor else rel_actions
         return data
