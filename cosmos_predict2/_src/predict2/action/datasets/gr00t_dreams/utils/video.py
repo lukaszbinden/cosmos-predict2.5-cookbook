@@ -110,12 +110,16 @@ def get_frames_by_timestamps(
         # load all frames from first to last requested timestamp
         loaded_frames = []
         loaded_ts = []
+        # Read one extra frame past last_ts to allow nearest-neighbor on the right.
+        read_past_last = False
         for frame in reader:
             current_ts = frame["pts"]
             loaded_frames.append(frame["data"])
             loaded_ts.append(current_ts)
-            if current_ts >= last_ts:
+            if read_past_last:
                 break
+            if current_ts >= last_ts:
+                read_past_last = True
         reader.container.close()
         reader = None
 
