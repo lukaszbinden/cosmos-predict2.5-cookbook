@@ -833,6 +833,39 @@ AC_CHUNK_MULTI_VIEW_2B_GR00T_GR1_CUSTOMIZED_13FRAME_FULL_16NODES_OSS = LazyDict(
     flags={"allow_objects": True},
 )
 
+AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_4NODES_OSS = LazyDict(
+    dict(
+        defaults=[
+            "/experiment/2b_bridge_action_conditioned_oss",
+            {"override /net": "cosmos_v1_2B_action_chunk_conditioned"},
+            {"override /data_train": "suturebot_train"},
+            {"override /data_val": "suturebot_val"},
+            "_self_",
+        ],
+        job=dict(
+            group="official_runs_vid2vid",
+            name="cosmos_predict2p5_2B_action_conditioned_suturebot_13frame_4nodes_release_oss",
+            project="cosmos_predict2_action_conditioned",
+        ),
+        model=dict(
+            config=dict(
+                state_t=1 + 12 // 4,
+                net=dict(
+                    action_dim=20,
+                ),
+            ),
+        ),
+        dataloader_train=dict(
+            batch_size=4
+        ),
+        optimizer=dict(
+            lr=4e-5,
+            weight_decay=0.1,
+        ),
+    ),
+    flags={"allow_objects": True},
+)
+
 
 cs = ConfigStore.instance()
 
@@ -874,6 +907,10 @@ for _item, _item_wo_resume, _item_mock_wo_resume in [
     [
         AC_CHUNK_MULTI_VIEW_2B_GR00T_GR1_CUSTOMIZED_13FRAME_FULL_16NODES_OSS,
         *build_debug_runs(AC_CHUNK_MULTI_VIEW_2B_GR00T_GR1_CUSTOMIZED_13FRAME_FULL_16NODES_OSS),
+    ],
+    [
+        AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_4NODES_OSS,
+        *build_debug_runs(AC_CHUNK_SINGLE_VIEW_2B_SUTUREBOT_13FRAME_4NODES_OSS),
     ],
 ]:
     cs.store(group="experiment", package="_global_", name=f"{_item['job']['name']}", node=_item)
